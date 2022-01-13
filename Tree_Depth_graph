@@ -1,0 +1,44 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.tree import DecisionTreeRegressor
+
+data = np.load('sdss_galaxy_colors.npy')
+n=data.size
+
+features = np.asarray([data['u']-data['g'],\
+                       data['g']-data['i'],\
+                       data['r']-data['i'],\
+                       data['i']-data['z'] ])
+
+targets = np.asarray(data['redshift'])
+features = features.T
+
+split = n//2
+train_features = features[:split]
+test_features = features[split:]
+train_targets = targets[:split]
+test_targets = targets[split:]
+
+# Listas que serán llenadas con los valores predichos del redshift en los
+# conjuntos de entrenamiento y prueba, para profundidades entre 1 y 40:
+median_dif_train=[]
+median_dif_test=[]
+
+for i in range(1, 41):
+    dec_tree = DecisionTreeRegressor(max_depth=i)
+    dec_tree.fit(train_features, train_targets)
+    predictions_train = dec_tree.predict(train_features) #Predicciones conjunto de entrenamiento
+    predictions_test = dec_tree.predict(test_features) #Predicciones conjunto de prueba
+    eval_dec_tree_train = np.median(np.abs(predictions_train - train_targets)) #Mediana error conjunto de entrenamiento
+    eval_dec_tree_test = np.median(np.abs(predictions_test - test_targets)) #Mediana error conjunto de prueba
+    median_dif_test.append(eval_dec_tree_test)
+    median_dif_train.append(eval_dec_tree_train)
+
+x=np.arange(1,41,1)
+
+plt.figure()
+plt.plot(x, median_dif_test, color='orange', label='Validation Set')
+plt.plot(x, median_dif_train, color='blue', label='Training Set')
+plt.xlabel('Maximum Tree Depth')
+plt.ylabel('Median of Differences')
+plt.legend()

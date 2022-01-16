@@ -1,0 +1,120 @@
+import numpy as np
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.model_selection import KFold
+from matplotlib import pyplot as plt
+
+data = np.load('sdss_galaxy_colors.npy')
+m=len(data)
+
+# Arrays que serán llenados con la información correspondiente a cada clase espectral:
+d_1=np.zeros_like(data) #Array para QSOs
+d_2=np.zeros_like(data) #Array para galaxias
+
+for i in range(0,m):
+    if data[i]['spec_class']==b'QSO':
+        d_1[i]=data[i]
+    else:
+        d_2[i]=data[i]
+
+# Los arrays recién creados tienen el mismo tamaño del array 'data',
+# por lo tanto quedan filas llenas de ceros que deben eliminarse.
+# Se determinan los índices de dichas filas:
+index1=[]
+index2=[]
+for j in range(0,m):
+    if d_1[j]['spec_class']!=b'QSO':
+        index1.append(j)
+    if d_2[j]['spec_class']!=b'GALAXY':
+        index2.append(j)
+
+# Se crean nuevos arrays para cada clase espectral, sin las filas llenas ceros:        
+d_QSO=np.delete(d_1, index1) #Array para QSOs
+d_gal=np.delete(d_2, index2) #Array para galaxias
+
+#División de los conjuntos en los k-subconjuntos: 
+kf = KFold(n_splits=5, shuffle=True)
+dec_tree = DecisionTreeRegressor(max_depth=19)
+
+# Con cada conjunto, d_QSO y d_gal, se procede como en el ejemplo descrito en el numeral 26:
+
+# Para QSOs:
+features_QSO = np.asarray([d_QSO['u']-d_QSO['g'],\
+                       d_QSO['g']-d_QSO['i'],\
+                       d_QSO['r']-d_QSO['i'],\
+                       d_QSO['i']-d_QSO['z'] ])
+features_QSO = features_QSO.T
+targets_QSO = np.asarray(d_QSO['redshift'])
+
+all_predictions_QSO = np.zeros_like(targets_QSO)
+
+for train_indices, test_indices in kf.split(features_QSO):
+  train_features_QSO, test_features_QSO = features_QSO[train_indices], features_QSO[test_indices]
+  train_targets_QSO, test_targets_QSO = targets_QSO[train_indices], targets_QSO[test_indices]
+
+  # Train the decision tree
+  dec_tree.fit(train_features_QSO, train_targets_QSO)
+  
+  # Predict using the model
+  predictions_QSO = dec_tree.predict(test_features_QSO)
+
+  # put the predicted values in the all_predictions array defined above
+  all_predictions_QSO[test_indices] = predictions_QSO
+  
+#Evaluate the model using the median of differences of all_predictions
+eval_dec_tree_QSO = np.median(np.abs(all_predictions_QSO - targets_QSO))
+
+
+# Para Galaxias:
+features_gal = np.asarray([d_gal['u']-d_gal['g'],\
+                       d_gal['g']-d_gal['i'],\
+                       d_gal['r']-d_gal['i'],\
+                       d_gal['i']-d_gal['z'] ])
+features_gal = features_gal.T
+targets_gal = np.asarray(d_gal['redshift'])
+
+all_predictions_gal = np.zeros_like(targets_gal)
+
+for train_indices, test_indices in kf.split(features_gal):
+  train_features_gal, test_features_gal = features_gal[train_indices], features_gal[test_indices]
+  train_targets_gal, test_targets_gal = targets_gal[train_indices], targets_gal[test_indices]
+
+  # Train the decision tree
+  dec_tree.fit(train_features_gal, train_targets_gal)
+  
+  # Predict using the model
+  predictions_gal = dec_tree.predict(test_features_gal)
+
+  # put the predicted values in the all_predictions array defined above
+  all_predictions_gal[test_indices] = predictions_gal
+
+#Evaluate the model using the median of differences of all_predictions
+eval_dec_tree_gal = np.median(np.abs(all_predictions_gal - targets_gal)) 
+
+
+# Resultados pedidos:
+print(' Cantidad de Galaxias= ', len(d_gal))
+print(' Cantidad de QSOs= ', len(d_QSO))
+print(' Mediana Residuos Galaxias= ', eval_dec_tree_gal)
+print(' Mediana Residuos QSOs= ', eval_dec_tree_QSO)
+print(' Error Absoluto Máximo Galaxias= ', max(np.abs(all_predictions_gal - targets_gal)))
+print(' Error Absoluto Máximo QSOs= ', max(np.abs(all_predictions_QSO - targets_QSO)))
+
+fig, ax= plt.subplots(1,2, figsize=(15,5))  
+
+im1=ax[0].scatter(targets_QSO, np.abs(all_predictions_QSO - targets_QSO), s=0.5, label='QSOs')
+im1=ax[0].scatter(targets_gal, np.abs(all_predictions_gal - targets_gal), s=0.5, color='orange', label='Galaxies')
+ax[0].set_xlabel('Measured Redshift')
+ax[0].set_ylabel('Absolute Error')
+ax[0].set_xlim(0, 3.5)
+ax[0].set_ylim(0, 3.5)
+ax[0].legend(markerscale=5)
+
+im2=ax[1].scatter(targets_QSO, all_predictions_QSO, s=0.5, label='QSOs')
+im2=ax[1].scatter(targets_gal, all_predictions_gal, s=0.5, color='orange', label='Galaxies')
+ax[1].set_xlabel('Measured Redshift')
+ax[1].set_ylabel('Predicted Redshift')
+ax[1].set_xlim(0, 3.5)
+ax[1].set_ylim(0, 3.5)
+ax[1].legend(markerscale=5)
+
+plt.show()
